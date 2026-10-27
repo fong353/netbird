@@ -21,15 +21,15 @@ func SetAndroidProtectSocketFn(fn func(fd int32) bool) {
 
 // ControlProtectSocket is a Control function that sets the fwmark on the socket
 func ControlProtectSocket(_, _ string, c syscall.RawConn) error {
-	if netstack.IsEnabled() {
-		return nil
-	}
 	var aErr error
 	err := c.Control(func(fd uintptr) {
 		androidProtectSocketLock.Lock()
 		defer androidProtectSocketLock.Unlock()
 
 		if androidProtectSocket == nil {
+			if netstack.IsEnabled() {
+				return
+			}
 			aErr = fmt.Errorf("socket protection function not set")
 			return
 		}

@@ -22,6 +22,7 @@ import (
 	"github.com/netbirdio/netbird/client/internal/peer"
 	"github.com/netbirdio/netbird/client/internal/profilemanager"
 	"github.com/netbirdio/netbird/client/mdm"
+	"github.com/netbirdio/netbird/client/netevents"
 	nbssh "github.com/netbirdio/netbird/client/ssh"
 	"github.com/netbirdio/netbird/client/system"
 	"github.com/netbirdio/netbird/shared/management/domain"
@@ -46,21 +47,32 @@ type PeerConnStatus = peer.ConnStatus
 
 // Client manages a netbird embedded client instance.
 type Client struct {
-	deviceName string
-	config     *profilemanager.Config
-	mu         sync.Mutex
-	cancel     context.CancelFunc
-	setupKey   string
-	jwtToken   string
-	connect    *internal.ConnectClient
-	recorder   *peer.Status
+	interfaceDiscover InterfaceDiscover
+	netEvents         *netevents.Manager
+	deviceName        string
+	config            *profilemanager.Config
+	mu                sync.Mutex
+	cancel            context.CancelFunc
+	setupKey          string
+	jwtToken          string
+	connect           *internal.ConnectClient
+	recorder          *peer.Status
 	// inMemoryState is set when no StatePath was given in netstack mode,
 	// where the client changes nothing on the host that needs restoring.
 	inMemoryState bool
 }
 
+// InterfaceDiscover supplies OS network interfaces to Android embedded clients.
+type InterfaceDiscover interface {
+	IFaces() (string, error)
+}
+
 // Options configures a new Client.
 type Options struct {
+	// InterfaceDiscover supplies Android physical interfaces for ICE candidates.
+	InterfaceDiscover InterfaceDiscover
+	// NetEvents receives OS network availability and change notifications.
+	NetEvents *netevents.Manager
 	// DeviceName is this peer's name in the network
 	DeviceName string
 	// SetupKey is used for authentication
@@ -259,11 +271,13 @@ func New(opts Options) (*Client, error) {
 	}
 
 	return &Client{
-		deviceName: opts.DeviceName,
-		setupKey:   opts.SetupKey,
-		jwtToken:   opts.JWTToken,
-		config:     config,
-		recorder:   peer.NewRecorder(config.ManagementURL.String()),
+		interfaceDiscover: opts.InterfaceDiscover,
+		netEvents:         opts.NetEvents,
+		deviceName:        opts.DeviceName,
+		setupKey:          opts.SetupKey,
+		jwtToken:          opts.JWTToken,
+		config:            config,
+		recorder:          peer.NewRecorder(config.ManagementURL.String()),
 		// Without a path the default would be the installed agent's state
 		// file, which this client must neither read nor overwrite.
 		inMemoryState: opts.StatePath == "" && !opts.NoUserspace,
@@ -280,6 +294,8 @@ func (c *Client) Start(startCtx context.Context) error {
 	}
 
 	ctx, cancel := context.WithCancel(internal.CtxInitState(context.Background()))
+	stopStartCancellation := context.AfterFunc(startCtx, cancel)
+	defer stopStartCancellation()
 	defer func() {
 		if c.connect == nil {
 			cancel()
@@ -298,7 +314,10 @@ func (c *Client) Start(startCtx context.Context) error {
 	if err, _ := authClient.Login(ctx, c.setupKey, c.jwtToken); err != nil {
 		return fmt.Errorf("login: %w", err)
 	}
-	var connectOpts []internal.ConnectClientOption
+	connectOpts := []internal.ConnectClientOption{internal.WithInterfaceDiscover(c.interfaceDiscover)}
+	if c.netEvents != nil {
+		connectOpts = append(connectOpts, internal.WithNetEvents(c.netEvents))
+	}
 	if c.inMemoryState {
 		connectOpts = append(connectOpts, internal.WithInMemoryState())
 	}

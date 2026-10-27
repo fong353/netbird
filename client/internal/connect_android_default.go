@@ -65,8 +65,12 @@ func init() {
 	// Applications that need P2P ICE or real DNS should replace this by
 	// setting androidRunOverride before calling Start().
 	androidRunOverride = func(c *ConnectClient, runningChan chan struct{}, logPath string) error {
+		var discover stdnet.ExternalIFaceDiscover = noopIFaceDiscover{}
+		if c.interfaceDiscover != nil {
+			discover = c.interfaceDiscover
+		}
 		return c.runOnAndroidEmbed(
-			noopIFaceDiscover{},
+			discover,
 			noopNetworkChangeListener{},
 			[]netip.AddrPort{},
 			noopDnsReadyListener{},

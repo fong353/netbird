@@ -58,13 +58,14 @@ import (
 var androidRunOverride func(c *ConnectClient, runningChan chan struct{}, logPath string) error
 
 type ConnectClient struct {
-	ctx            context.Context
-	runCancel      context.CancelFunc
-	runExited      chan struct{}
-	runOnce        sync.Once
-	runStarted     atomic.Bool
-	config         *profilemanager.Config
-	statusRecorder *peer.Status
+	interfaceDiscover stdnet.ExternalIFaceDiscover
+	ctx               context.Context
+	runCancel         context.CancelFunc
+	runExited         chan struct{}
+	runOnce           sync.Once
+	runStarted        atomic.Bool
+	config            *profilemanager.Config
+	statusRecorder    *peer.Status
 
 	engine        *Engine
 	engineMutex   sync.Mutex
@@ -91,6 +92,11 @@ type ConnectClientOption func(*ConnectClient)
 // file, so the client neither reads nor writes another installation's state.
 func WithInMemoryState() ConnectClientOption {
 	return func(c *ConnectClient) { c.inMemoryState = true }
+}
+
+// WithInterfaceDiscover supplies physical interfaces for embedded Android clients.
+func WithInterfaceDiscover(discover stdnet.ExternalIFaceDiscover) ConnectClientOption {
+	return func(c *ConnectClient) { c.interfaceDiscover = discover }
 }
 
 // WithNetEvents injects the OS network event handling.
