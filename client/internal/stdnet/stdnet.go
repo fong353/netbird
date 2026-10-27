@@ -16,8 +16,6 @@ import (
 
 	"github.com/pion/transport/v3"
 	"github.com/pion/transport/v3/stdnet"
-
-	"github.com/netbirdio/netbird/client/iface/netstack"
 )
 
 const (
@@ -53,12 +51,10 @@ func NewNetWithDiscover(ctx context.Context, iFaceDiscover ExternalIFaceDiscover
 		interfaceFilter: InterfaceFilter(disallowList, detector),
 		ctx:             ctx,
 	}
-	// current ExternalIFaceDiscover implement in android-client https://github.dev/netbirdio/android-client
-	// so in android cli use pionDiscover
-	if netstack.IsEnabled() {
-		n.iFaceDiscover = pionDiscover{}
-	} else {
+	if iFaceDiscover != nil {
 		n.iFaceDiscover = newMobileIFaceDiscover(iFaceDiscover)
+	} else {
+		n.iFaceDiscover = pionDiscover{}
 	}
 	return n
 }

@@ -6,10 +6,27 @@ import (
 	"net"
 	"testing"
 
+	"github.com/netbirdio/netbird/client/iface/netstack"
 	"github.com/pion/transport/v3"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+type externalDiscover struct{}
+
+func (externalDiscover) IFaces() (string, error) {
+	return "wlan0 7 1500 true true false false true | 192.168.20.3/24", nil
+}
+
+func TestNewNetWithDiscoverHonorsMobileCallbackInNetstackMode(t *testing.T) {
+	t.Setenv(netstack.EnvUseNetstackMode, "true")
+	n := NewNetWithDiscover(context.Background(), externalDiscover{}, nil, nil)
+	interfaces, err := n.Interfaces()
+	require.NoError(t, err)
+	require.Len(t, interfaces, 1)
+	assert.Equal(t, "wlan0", interfaces[0].Name)
+	assert.Equal(t, 7, interfaces[0].Index)
+}
 
 type countingDiscover struct {
 	calls int
